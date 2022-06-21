@@ -1,9 +1,12 @@
 import * as THREE from 'three';
-import { Color, Matrix3, Vector3 } from 'three';
+import { Color, Vector3 } from 'three';
 import { makeArray } from 'rhax';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { generatePermutations } from './utils';
+import { generatePermutations, sleep } from './utils';
+import anime from 'animejs';
 import './style.css';
+
+const { PI } = Math;
 
 const canvas = document.querySelector('canvas')!;
 
@@ -25,8 +28,8 @@ const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerH
 
 const controls = new OrbitControls(camera, renderer.domElement);
 
-const axesHelper = new THREE.AxesHelper(5);
-scene.add(axesHelper);
+// const axesHelper = new THREE.AxesHelper(5);
+// scene.add(axesHelper);
 
 const cubes: THREE.Mesh[] = [];
 
@@ -82,46 +85,38 @@ function animate() {
 }
 animate();
 
-function rotate(axis: 'x' | 'y' | 'z', sign: 1 | -1, clockwise: boolean) {
+async function rotate(direction: 'x' | 'y' | 'z', sign: 1 | -1, clockwise: boolean, duration = 400) {
+    const axis = new Vector3();
+    axis[direction] = sign * (n - 1) / 2;
 
-  const direction = new Vector3();
-  direction[axis] = sign * (n - 1) / 2;
+    const faceCubes = cubes.filter(cube => cube.position[direction] === axis[direction]);
+    const cubeOriginalPositions = faceCubes.map(c => c.position.clone());
 
-  const faceCubes = cubes.filter(cube => cube.position[axis] === direction[axis]);
+    const timer = { t: 0 }
 
-  faceCubes.forEach(cube => {
-    cube.quaternion.setFromAxisAngle(direction, (clockwise ? -1 : 1) * Math.PI / 2);
-    //console.log(cube.position, rotateNinety(cube.position, axis, sign, clockwise));
+    const animation = anime({
+      targets: timer,
+      t: 1,
+      duration,
+      easing: 'easeInOutCubic',
+      update() {
+        const { t } = timer;
+        const angle = (clockwise ? -1 : 1) * (PI / 2) * t;
+        console.log(t, angle);
 
-    const positionRotation = rotateNinety(axis, clockwise, sign);
-    console.log(cube.position.clone());
-    cube.position.applyMatrix3(positionRotation);
-    console.log(cube.position);
-  })
+        for (let i = 0; i < faceCubes.length; i++) {
+          const cube = faceCubes[i];
+          const originalPos = cubeOriginalPositions[i];
 
+          cube.quaternion.setFromAxisAngle(axis, angle);
+          cube.position.copy(originalPos.clone().applyAxisAngle(axis, angle));
+        }
+      }
+    });
 
+    return animation.finished;
 }
 
-function rotateNinety(axis: 'x' | 'y' | 'z', clockwise: boolean, sign: 1 | -1): THREE.Matrix3 {
-  const s = sign * (clockwise ? -1 : 1);
-  switch (axis) {
-    case 'x': return new Matrix3().set(
-      1, 0, 0,
-      0, 0, s*1,
-      0, s*-1, 0
-    )
-    .transpose();
-    case 'y': return new Matrix3().set(
-      0, 0, s*-1,
-      0, 1, 0,
-      s*1, 0, 0
-    ).transpose();
-    case 'z': return new Matrix3().set(
-      0, s*1, 0,
-      s*-1, 0, 0,
-      0, 0, 1
-    ).transpose()
-  }
-}
-
-rotate('z', -1, true);
+sleep(500).then(() => {
+  rotate('x', 1, false)
+})

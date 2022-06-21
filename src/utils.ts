@@ -13,3 +13,5 @@ export function* generatePermutations<T>(...iters: Iterable<T>[]): Generator<T[]
     }
   }
 }
+
+export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

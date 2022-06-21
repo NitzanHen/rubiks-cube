@@ -1,12 +1,13 @@
 import * as THREE from 'three';
-import { Color, Vector3 } from 'three';
+import { Color, Quaternion, Vector3 } from 'three';
 import { makeArray } from 'rhax';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { generatePermutations, sleep } from './utils';
+import { generatePermutations, randomItem, round } from './utils';
 import anime from 'animejs';
 import './style.css';
 
 const { PI } = Math;
+
 
 const canvas = document.querySelector('canvas')!;
 
@@ -86,37 +87,75 @@ function animate() {
 animate();
 
 async function rotate(direction: 'x' | 'y' | 'z', sign: 1 | -1, clockwise: boolean, duration = 400) {
-    const axis = new Vector3();
-    axis[direction] = sign * (n - 1) / 2;
+  console.log(direction, sign, clockwise);
 
-    const faceCubes = cubes.filter(cube => cube.position[direction] === axis[direction]);
-    const cubeOriginalPositions = faceCubes.map(c => c.position.clone());
+  const axis = new Vector3();
+  axis[direction] = sign * (n - 1) / 2;
 
-    const timer = { t: 0 }
+  const faceCubes = cubes.filter(cube => cube.position[direction] === axis[direction]);
 
-    const animation = anime({
-      targets: timer,
-      t: 1,
-      duration,
-      easing: 'easeInOutCubic',
-      update() {
-        const { t } = timer;
-        const angle = (clockwise ? -1 : 1) * (PI / 2) * t;
-        console.log(t, angle);
+  const cubeOriginalPositions = faceCubes.map(c => c.position.clone());
+  const cubeOriginalQuaternions = faceCubes.map(c => c.quaternion.clone());
 
-        for (let i = 0; i < faceCubes.length; i++) {
-          const cube = faceCubes[i];
-          const originalPos = cubeOriginalPositions[i];
+  const timer = { t: 0 }
 
-          cube.quaternion.setFromAxisAngle(axis, angle);
-          cube.position.copy(originalPos.clone().applyAxisAngle(axis, angle));
-        }
+  const animation = anime({
+    targets: timer,
+    t: 1,
+    duration,
+    easing: 'easeInOutCubic',
+    update() {
+      const { t } = timer;
+      const angle = (clockwise ? -1 : 1) * (PI / 2) * t;
+
+      for (let i = 0; i < faceCubes.length; i++) {
+        const cube = faceCubes[i];
+        const originalPos = cubeOriginalPositions[i];
+        const originalQuat = cubeOriginalQuaternions[i];
+
+        cube.quaternion.copy(originalQuat.clone().premultiply(new Quaternion().setFromAxisAngle(axis, angle)));
+        cube.position.copy(originalPos.clone().applyAxisAngle(axis, angle));
       }
-    });
+    }
+  });
 
-    return animation.finished;
+  await animation.finished;
+
+  // Positions might be almost integers, round them so filtering by coordinate works.
+  for (const cube of faceCubes) {
+    const { x, y, z } = cube.position;
+    cube.position.set(round(x, 3), round(y, 3), round(z, 3))
+  }
 }
 
-sleep(500).then(() => {
-  rotate('x', 1, false)
-})
+const shuffle = (shuffles: number) => {
+  let count = 0;
+
+  const shuffleInner = () => {
+    setTimeout(() => {
+      count++;
+
+      const direction = randomItem('x', 'y', 'z');
+      const sign = randomItem(1, -1)
+      const clockwise = randomItem(true, false)    
+  
+      if(count < shuffles) {
+        shuffleInner()
+      }
+  
+      rotate(direction, sign, clockwise, 400)
+    }, 600)
+  }
+
+  shuffleInner();
+}
+
+shuffle(30);
+
+// rotate('x', 1, true)
+//   .then(() => sleep(1000))
+//   .then(() => rotate('y', 1, true))
+//   .then(() => sleep(1000))
+//   .then(() => rotate('y', 1, false))
+//   .then(() => sleep(1000))
+//   .then(() => rotate('y', 1, true))

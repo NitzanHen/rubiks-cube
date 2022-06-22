@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "animejs": "^3.2.1",
-    "rhax": "^2.2.0",
+    "rhax": "^2.3.0",
     "three": "^0.141.0"
   }
 }

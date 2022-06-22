@@ -207,10 +207,10 @@ resolve@^1.22.0:
     path-parse "^1.0.7"
     supports-preserve-symlinks-flag "^1.0.0"
 
-rhax@^2.2.0:
-  version "2.2.0"
-  resolved "https://registry.yarnpkg.com/rhax/-/rhax-2.2.0.tgz#3a0a7518b75f44979e7a014486119c53dd6b019c"
-  integrity sha512-hzCH33+eiiIqu5EiP7wgoItH/zEdOKDYpsBgOCLMKtCyA5onv7rCpfkinfdWhMiP1T84wwP3dR414ttHeLx5pw==
+rhax@^2.3.0:
+  version "2.3.0"
+  resolved "https://registry.yarnpkg.com/rhax/-/rhax-2.3.0.tgz#6c4e60d5a6a33496aa13f5f9430234668091e39f"
+  integrity sha512-1BxI+yih9iwvCHLNIobUIQl5F3UDjMMvXpX+pxI7vg2tov7EsAbmvqmmAiiVe5IZgV7GFSMGXujD3Kf4Mbv/0w==
 
 rollup@^2.59.0:
   version "2.75.7"

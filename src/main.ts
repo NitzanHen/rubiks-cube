@@ -1,21 +1,25 @@
 import * as THREE from 'three';
-import { Clock, Color, Mesh, Quaternion, Vector3 } from 'three';
-import { makeArray, tuple } from 'rhax';
+import { Color, Quaternion, Vector3 } from 'three';
+import { makeArray, map, zip } from 'rhax';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { Axis, generatePermutations, randomInt, randomIntExcluding, round, Sign, sleep } from './utils';
+import { generatePermutations, infinityNorm, randomInt, randomIntExcluding, sleep } from './utils';
+import anime from 'animejs';
 import './style.css';
+import { Vec3 } from './types';
+import { Cube } from './Cube';
+import { Rotation, rotations } from './Rotation';
 
-const { PI, pow } = Math;
-
+const { PI } = Math;
 
 const canvas = document.querySelector('canvas')!;
 
 const n = 3;
 
 const positions = [...generatePermutations(
-  ...makeArray(3, () => makeArray(n, i => i - (n - 1) / 2))
-)];
+  ...makeArray(3, () => makeArray(n))
+)] as Vec3[];
 
+const cubeCoords = positions.map((pos: Vec3) => pos.map(i => i - (n - 1) / 2) as Vec3);
 
 const renderer = new THREE.WebGLRenderer({ canvas });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -31,10 +35,10 @@ const controls = new OrbitControls(camera, renderer.domElement);
 // const axesHelper = new THREE.AxesHelper(5);
 // scene.add(axesHelper);
 
-const cubes: THREE.Mesh[] = [];
+const cubes: Cube[] = [];
 
-for (const pos of positions) {
-  const piece = new THREE.BoxGeometry(0.95, 0.95, 0.95).toNonIndexed();
+for (const coords of cubeCoords) {
+  const piece = new THREE.BoxGeometry(0.92, 0.92, 0.92).toNonIndexed();
 
   const material = new THREE.MeshBasicMaterial({
     vertexColors: true
@@ -44,17 +48,17 @@ for (const pos of positions) {
   const faceColors = ['blue', 'green', 'yellow', 'orange', 'red', 'white']
   // These are the directions in which three.js paints the faces, in order.
   const directions = [
-    new Vector3(1, 0, 0), new Vector3(-1, 0, 0),
-    new Vector3(0, 1, 0), new Vector3(0, -1, 0),
-    new Vector3(0, 0, 1), new Vector3(0, 0, -1),
+    [1, 0, 0], [-1, 0, 0],
+    [0, 1, 0], [0, -1, 0],
+    [0, 0, 1], [0, 0, -1],
   ];
 
   for (let j = 0; j < 6; j++) {
-
-    const position = new Vector3(pos[0], pos[1], pos[2]);
-
     const direction = directions[j];
-    const facingOutwards = position.clone().add(direction).length() > position.clone().sub(direction).length();
+
+    const sum = map(zip(coords, direction), ([a, b]) => a + b)
+
+    const facingOutwards = infinityNorm(sum) === (n + 1) / 2;
 
     const color = facingOutwards ? new Color(faceColors[j]) : scene.background.clone();
 
@@ -64,11 +68,12 @@ for (const pos of positions) {
   }
 
   piece.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  const cube = new THREE.Mesh(piece, material);
-  cube.position.set(pos[0], pos[1], pos[2]);
 
-  cubes.push(cube);
-  scene.add(cube);
+  const mesh = new THREE.Mesh(piece, material);
+  mesh.position.fromArray(coords);
+
+  cubes.push(new Cube(mesh, coords));
+  scene.add(mesh);
 }
 
 
@@ -85,75 +90,69 @@ function animate() {
 }
 animate();
 
-const fixCubeCoords = (cubes: Mesh[]) => cubes.forEach((cube) => {
-  const { x, y, z } = cube.position;
-  cube.position.set(round(x, 3), round(y, 3), round(z, 3))
-})
+const fixMeshCoords = (cubes: Cube[]) => cubes.forEach(({ mesh, coords }) => mesh.position.fromArray(coords))
 
-async function rotate(axis: Axis, sign: Sign, clockwise: boolean, duration = 400) {
+async function rotate(rotation: Rotation, duration: number) {
   return new Promise<void>((resolve) => {
+    const { axis, sign, clockwise } = rotation;
 
-    const direction = new Vector3();
-    direction[axis] = sign * (n - 1) / 2;
+    // Normal vector to the face on which the rotation operates
+    const normal = new Vector3();
+    normal[axis] = sign;
 
-    const faceCubes = cubes.filter(cube => cube.position[axis] === direction[axis]);
+    const faceCubes = cubes.filter((cube) => cube.mesh.position[axis] === sign * (n - 1) / 2);
 
-    const cubeOriginalPositions = faceCubes.map(c => c.position.clone());
-    const cubeOriginalQuaternions = faceCubes.map(c => c.quaternion.clone());
+    const cubeOriginalPositions = faceCubes.map(({ mesh }) => mesh.position.clone());
+    const cubeOriginalQuaternions = faceCubes.map(({ mesh }) => mesh.quaternion.clone());
 
-    function easeInOutCubic(t: number): number {
-      return t < 0.5 ? 4 * pow(t, 3) : 1 - pow(-2 * t + 2, 3) / 2;
-    }
+    const timer = { t: 0 };
 
-    const clock = new Clock();
-    const handleVisibilityChange = () => {
-      console.log(document.visibilityState)
-      document.visibilityState === 'hidden' ? clock.stop() : clock.start();
-    }
-    addEventListener('visibilitychange', handleVisibilityChange);
-
-    const tick = () => {
-
-      const elapsed = clock.getElapsedTime() * 1000 // convert to ms
-
-      if (elapsed > duration) {
-        // Positions might be almost integers, round them so filtering by coordinate works.
-        fixCubeCoords(cubes);
-        clock.stop();
-        removeEventListener('visibilityChange', handleVisibilityChange);
-        return resolve();
-      }
-
-      requestAnimationFrame(tick);
-
-      const t = easeInOutCubic(elapsed / duration);
-
-
+    const tick = (t: number) => {
       const angle = (clockwise ? -1 : 1) * (PI / 2) * t;
 
       for (let i = 0; i < faceCubes.length; i++) {
-        const cube = faceCubes[i];
+        const { mesh } = faceCubes[i];
         const originalPos = cubeOriginalPositions[i];
         const originalQuat = cubeOriginalQuaternions[i];
 
-        cube.quaternion.copy(originalQuat.clone().premultiply(new Quaternion().setFromAxisAngle(direction, angle)));
-        cube.position.copy(originalPos.clone().applyAxisAngle(direction, angle));
+        mesh.quaternion.copy(originalQuat.clone().premultiply(new Quaternion().setFromAxisAngle(normal, angle)));
+        mesh.position.copy(originalPos.clone().applyAxisAngle(normal, angle));
       }
     }
 
-    clock.start();
-    tick();
+    const animation = anime({
+      targets: timer,
+      t: 1,
+      duration,
+      easing: 'easeInOutCubic',
+      autoplay: false,
+      update() {
+        tick(timer.t);
+      },
+      complete() {
+        Rotation.apply(faceCubes, rotation);
+        fixMeshCoords(cubes);
+
+        //removeEventListener('visibilityChange', handleVisibilityChange);
+
+        console.log('finished')
+
+        resolve();
+      }
+    });
+
+    // const handleVisibilityChange = () => {
+    //   document.visibilityState === 'hidden' ? animation.pause() : animation.play();
+    // }
+    // addEventListener('visibilitychange', handleVisibilityChange);
+
+    animation.play();
   });
 }
 
 let shuffling = false;
-/** @todo typing */
-const rotations = [...generatePermutations<any>(
-  tuple('x', 'y', 'z'),
-  tuple(1, -1),
-  tuple(true, false)
-)] as [Axis, Sign, boolean][];
-let lastRotation: [Axis, Sign, boolean] | null = null;
+
+let lastRotation: Rotation;;
 let rotationIndex: number;
 
 const shuffle = async (shuffles: number) => {
@@ -167,15 +166,13 @@ const shuffle = async (shuffles: number) => {
   lastRotation = rotations[rotationIndex];
 
   for (let i = 0; i < shuffles; i++) {
-    const [lastAxis, lastSign, lastClockwise] = lastRotation;
-    const inverseIndex = rotations.findIndex(([a, s, c]) => a === lastAxis && s === lastSign && c === !lastClockwise);
+    const inverseIndex = rotations.findIndex(r => Rotation.equal(r, Rotation.inverse(lastRotation)));
 
     rotationIndex = randomIntExcluding(0, rotations.length, inverseIndex);
     const rotation = rotations[rotationIndex];
-    const [axis, sign, clockwise] = rotation;
 
-    await rotate(axis, sign, clockwise, 400);
-    await sleep(200);
+    await rotate(rotation, 300);
+    await sleep(60);
 
     lastRotation = rotation;
   }
@@ -183,12 +180,4 @@ const shuffle = async (shuffles: number) => {
   shuffling = false;
 }
 
-shuffle(30)
-
-// rotate('x', 1, true)
-//   .then(() => sleep(1000))
-//   .then(() => rotate('y', 1, true))
-//   .then(() => sleep(1000))
-//   .then(() => rotate('y', 1, false))
-//   .then(() => sleep(1000))
-//   .then(() => rotate('y', 1, true))
+shuffle(100);

@@ -1,6 +1,4 @@
-
-export type Axis = 'x' | 'y' | 'z';
-export type Sign = 1 | -1;
+import { map, max, pipe } from 'rhax';
 
 export function* generatePermutations<T>(...iters: Iterable<T>[]): Generator<T[]> {
   if (iters.length === 0) {
@@ -35,3 +33,9 @@ export const randomIntExcluding = (min: number, max: number, excluded: number) =
 export const randomItem = <T>(...items: T[]): T => items[randomInt(0, items.length)];
 
 export const round = (x: number, n: number) => Math.round(x * 10 ** n) / 10 ** n;
+
+export const infinityNorm = (vec: number[]): number =>
+  pipe(vec)
+    (map(x => Math.abs(x)))
+    (max)
+    .go();
